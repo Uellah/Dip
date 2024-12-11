@@ -1,12 +1,6 @@
 import numpy as np
 from utils import out_to_file
-
-OUT_FILE = out_to_file('rs.csv')
-
-sigma_0 = 5.67e-8
-u_l = 100
-u_r = 100
-lamda = 100
+from task1 import Lx, Ly, p, n, u_l, u_r, lamda, sigma_0
 
 def h(u):
     return sigma_0 * np.abs(np.power(u, 3))*u
@@ -14,30 +8,13 @@ def h(u):
 def h_der(u):
     return 4 * sigma_0 * np.power(u, 3)
 
-n = 2   # количество пластин.
-p = 3   # количество точек по x в одной пластине.
-N_y = 3   # количество точек по y.
-N_x = n * p    # количество точек по x
-Lx = 1
-Ly =  1
-hx = Lx / (n * (p - 1))  # Шаг сетки по x
-hy = Ly / (N_y - 1)  # Шаг сетки по y
-grid = np.ones((N_x, N_y))  # Общая сетка всех пластин
-grid[0, :] = [1, 2, 3]
-grid[1, :] = [2, 3, 4]
-grid[2, :] = [3, 4, 5]
-grid[3, :] = [4, 5, 6]
-grid[4, :] = [5, 6, 7]
-grid[5, :] = [6, 7, 8]
-
-print(hx)
-OUT_FILE.write_numpy_to_csv(grid)
-
-# print(grid)
 class A:
-    def __init__(self, hx, hy):
-        self.hx = hx
-        self.hy = hy
+    def __init__(self, Ny):
+        self.N_x = n * p
+        self.Ny = Ny
+
+        self.hx = Lx / (n * (p - 1))  # Шаг сетки по x
+        self.hy = Ly / (Ny - 1)  # Шаг сетки по y
 
     def second_y_der(self, u, i, j):
         res = (u[i][j-1] - 2 * u[i][j] + u[i][j+1])/np.power(self.hy, 2)
@@ -73,16 +50,18 @@ class A:
         second = self.second_y_der(u, i, j) / 2
         third = (h(u[i-1][j]) - h(u[i][j])) / self.hx / lamda
         return first - second - third
-
-    def apply_operator(self):
-        res = np.zeros((N_x, N_y))
-
-        for j in range(1, N_y - 1):
+    # def Au(self, grid, i, j):
+    #     if i == 0:
+    #         return
+    def apply_operator(self, grid):
+        res = np.zeros((self.N_x, self.Ny))
+        # res = grid.copy()
+        for j in range(1, self.Ny - 1):
             res[0][j] = self.left_bound_exter(grid, j)
-            res[N_x - 1][j] = self.right_bound_exter(grid, N_x - 1, j)
+            res[self.N_x - 1][j] = self.right_bound_exter(grid, self.N_x - 1, j)
 
-        for i in range(1, N_x - 1):
-            for j in range(1, N_y - 1):
+        for i in range(1, self.N_x - 1):
+            for j in range(1, self.Ny - 1):
                 if i % p == 0:
                     res[i][j] = self.left_bound_inner(grid, i, j)
                     break
@@ -90,19 +69,18 @@ class A:
                     res[i][j] = self.right_bound_inner(grid, i,  j)
                     break
                 res[i][j] = self.puasson(grid, i, j)
-        print(res)
+        # print(res)
         return res
-
-# print(grid)
-# S = A(hx, hy)
-# S.apply_operator()
-
 
 
 class A_der:
-    def __init__(self, hx, hy):
-        self.hx = hx
-        self.hy = hy
+
+    def __init__(self, Ny):
+        self.N_x = n * p
+        self.Ny = Ny
+
+        self.hx = Lx / (n * (p - 1))  # Шаг сетки по x
+        self.hy = Ly / (Ny - 1)  # Шаг сетки по y
 
     def second_y_der(self, u, i, j):
         res = (u[i][j - 1] - 2 * u[i][j] + u[i][j + 1]) / np.power(self.hy, 2)
@@ -138,27 +116,27 @@ class A_der:
         third = h_der(u[i - 1][j]) / (self.hx * lamda) * u_der[i - 1][j]
         return first - second - third - u_der[i + 1][j] / np.power(self.hx, 2)
 
-    def apply_operator(self):
-        res = np.zeros((N_x, N_y))
+    def apply_operator(self, u, u_der):
+        # res = np.zeros((self.N_x, self.Ny))
+        res = u_der.copy()
+        for j in range(1, self.Ny - 1):
+            res[0][j] = self.left_bound_exter(u, u_der, j)
+            res[self.N_x - 1][j] = self.right_bound_exter(u, u_der, self.N_x - 1, j)
 
-        for j in range(1, N_y - 1):
-            res[0][j] = self.left_bound_exter(grid, grid, j)
-            res[N_x - 1][j] = self.right_bound_exter(grid, grid, N_x - 1, j)
-
-        for i in range(1, N_x - 1):
-            for j in range(1, N_y - 1):
+        for i in range(1, self.N_x - 1):
+            for j in range(1, self.Ny - 1):
                 if i % p == 0:
-                    res[i][j] = self.left_bound_inner(grid, grid, i, j)
+                    res[i][j] = self.left_bound_inner(u, u_der, i, j)
                     break
                 if i % p == p - 1:
-                    res[i][j] = self.right_bound_inner(grid, grid, i, j)
+                    res[i][j] = self.right_bound_inner(u, u_der, i, j)
                     break
-                res[i][j] = self.puasson(grid, i, j)
-
-        print(res)
+                res[i][j] = self.puasson(u_der, i, j)
+        return res
+        # print(res)
 
 # print(grid)
-S = A_der(hx, hy)
-S.apply_operator()
-S = A(hx, hy)
-S.apply_operator()
+# S = A_der(hx, hy)
+# S.apply_operator()
+# S = A(hx, hy)
+# S.apply_operator()
