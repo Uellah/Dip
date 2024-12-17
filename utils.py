@@ -2,6 +2,9 @@ import os
 import numpy as np
 import csv
 
+
+
+
 class out_to_file:
     def __init__(self, filename):
         self.filename = filename

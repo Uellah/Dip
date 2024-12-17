@@ -1,54 +1,56 @@
 from A_der import A, A_der
-from task1 import N_x
+
 import numpy as np
 import time
-from task1 import Lx, Ly, p, n, u_l, u_r, lamda, sigma_0
 import matplotlib.pyplot as plt
 
+from task2 import X, Y, p, n, Ny
+from task2 import u_up, u_down
+
 class Solver:
-    def __init__(self, Ny):
-        self.Nx = N_x
+    def __init__(self):
+        self.Nx = n * p
         self.Ny = Ny
-        self.A = A(Ny)
-        self.A_d = A_der(Ny)
 
-        self.p = np.ones((self.Nx, self.Ny))
+        self.A = A()
+        self.A_d = A_der()
 
-        self.hx = Lx / (n * (p - 1))  # Шаг сетки по x
-        self.hy = Ly / (Ny - 1)  # Шаг сетки по y
+        self.p = np.full((self.Nx, self.Ny), 500.)
+
+        self.hx = X / (n * (p - 1))  # Шаг сетки по x
+        self.hy = Y / (Ny - 1)  # Шаг сетки по y
+
+    def get_grid_func(self, func, i, j):
+        d = i // p
+        return func((i - d) * self.hx, j * self.hy)
+
 
     def init(self, u):
         for i in range(self.Nx):
-            u[i][0] = 200.
-            u[i][self.Ny-1] = 200.
+            u[i][0] = self.get_grid_func(u_down, i,0)
+            u[i][-1] = self.get_grid_func(u_up, i, self.Ny - 1)
 
             # Усредняем значения по столбцам между краями
-        for j in range(1, self.Ny - 1):  # Проходим по всем столбцам между краями
-            for i in range(self.Nx):  # Проходим по всем строкам
-                u[i][j] = (u[i][0] + u[i][self.Ny - 1]) / 2.  # Усреднение
+        for i in range(self.Nx):  # Проходим по всем столбцам между краями
+            tmp = u[i][self.Ny - 1] - u[i][0]
+            for j in range(1, self.Ny - 1):  # Проходим по всем строкам
+                u[i][j] = u[i][0] + j / (self.Ny - 2) * tmp # Усреднение
 
     def sc_mult(self, u, v):
         s = 0
-        # k = 0
-        # for i in range(1, self.Nx - 1):
-        #     k = 0
-        #     for j in range(1, self.Ny - 1):
-        #         k += u[i, j] * v[i, j] * self.hy
-        #     s+= k * self.hx
         for i in range(0, self.Nx):
             for j in range(1, self.Ny - 1):
-                s += u[i, j] * v[i, j]
+                if i % p == 0 or i % p == p - 1:
+                    s += 0.5 * u[i, j] * v[i, j]
+                else:
+                    s += u[i, j] * v[i, j]
         return s
 
-    def BiCGStab(self, b, tol=1e-3, max_time=300, max_iter=10000000):
+    def BiCGStab(self, start, b, tol=1e-3, max_time=60, max_iter=10000000):
         start_time = time.time()
 
-        p_solv = np.ones((self.Nx, self.Ny))
-        for i in range(self.Nx):
-            p_solv[i][0] = 0
-            p_solv[i][self.Ny - 1] = 0
+        p_solv = start
 
-        #self.init(p_solv)
         r0 = np.zeros((self.Nx, self.Ny))
 
         nach = self.A_d.apply_operator(self.p, p_solv)
@@ -101,14 +103,18 @@ class Solver:
         return p_solv
 
     def solve(self):
-
         self.init(self.p)
 
-        delta = self.BiCGStab(-self.A.apply_operator(self.p))
+        tmp = np.ones((self.Nx, self.Ny), dtype = 'double')
+        for i in range(self.Nx):
+            tmp[i][0] = 0.
+            tmp[i][-1] = 0.
+
+        delta = self.BiCGStab(tmp,-self.A.apply_operator(self.p))
         self.p += delta
-        while(self.sc_mult(delta, delta)**(1/2) > 1e-1):
+        while self.sc_mult(delta, delta)**(1 / 2) > 1e-2:
             print(self.sc_mult(delta, delta)**(1/2))
-            delta = self.BiCGStab(-self.A.apply_operator(self.p))
+            delta = self.BiCGStab(delta, -self.A.apply_operator(self.p))
             self.p+=delta
         return self.p
 
@@ -117,7 +123,7 @@ class Solver:
         Построение тепловой карты для решения
         """
         plt.figure(figsize=(8, 6))
-        plt.imshow(self.p.T, extent=[0, 1. , 0, 1.], origin = 'lower', cmap='inferno', aspect='auto')
+        plt.imshow(self.p.T, extent=[0, .25 , 0, .25], origin = 'lower', cmap='inferno', aspect='auto')
         plt.colorbar(label='Температура')
         plt.xlabel('x')
         plt.ylabel('y')
