@@ -4,8 +4,8 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 
-from task2 import X, Y, p, n, Ny
-from task2 import u_up, u_down
+from task3 import X, Y, p, n, Ny
+from task3 import u_up, u_down
 
 class Solver:
     def __init__(self):
@@ -24,6 +24,10 @@ class Solver:
         d = i // p
         return func((i - d) * self.hx, j * self.hy)
 
+    def apply_border(self, u):
+        for i in range(self.Nx):
+            u[i][0] = self.get_grid_func(u_down, i,0)
+            u[i][-1] = self.get_grid_func(u_up, i, self.Ny - 1)
 
     def init(self, u):
         for i in range(self.Nx):
@@ -46,7 +50,7 @@ class Solver:
                     s += u[i, j] * v[i, j]
         return s
 
-    def BiCGStab(self, start, b, tol=1e-3, max_time=60, max_iter=10000000):
+    def BiCGStab(self, start, b, tol=1e-3, max_time=100, max_iter=10000000):
         start_time = time.time()
 
         p_solv = start
@@ -109,25 +113,49 @@ class Solver:
         for i in range(self.Nx):
             tmp[i][0] = 0.
             tmp[i][-1] = 0.
+        iter = 0
 
         delta = self.BiCGStab(tmp,-self.A.apply_operator(self.p))
         self.p += delta
-        while self.sc_mult(delta, delta)**(1 / 2) > 1e-2:
+        while self.sc_mult(delta, delta) > 0.01:
+
             print(self.sc_mult(delta, delta)**(1/2))
-            delta = self.BiCGStab(delta, -self.A.apply_operator(self.p))
-            self.p+=delta
+            # if iter % 10 == 0:
+            #     delta = tmp
+            old_d = delta
+            delta = self.BiCGStab(old_d, -self.A.apply_operator(self.p))
+            self.p += delta
+            iter += 1
         return self.p
 
-    def plot_heatmap(self):
+    def plot_heatmap(self, other_array):
         """
-        Построение тепловой карты для решения
+        Построение тепловых карт для решения.
+        Слева отображается self.p с подписью "Мой метод",
+        справа – переданный массив other_array с подписью "Встроенный метод".
+
+        Аргументы:
+            other_array (numpy.ndarray): Массив такого же размера, как self.p, для сравнения.
         """
-        plt.figure(figsize=(8, 6))
-        plt.imshow(self.p.T, extent=[0, .25 , 0, .25], origin = 'lower', cmap='inferno', aspect='auto')
-        plt.colorbar(label='Температура')
-        plt.xlabel('x')
-        plt.ylabel('y')
-        # plt.title(f'Норма невязки: {self.get_r_norm()}')
-        # output_path = os.path.join('out_im_bi', 'heatmap_' + str(self.Nx) +'_'+ str(self.M.TaskNumber) +'.png')
-        # plt.savefig(output_path)
+        import matplotlib.pyplot as plt
+
+        # Создаем фигуру с двумя подграфиками (subplot'ами)
+        fig, axs = plt.subplots(1, 2, figsize=(16, 6))
+
+        # Первый subplot: наш метод
+        im0 = axs[0].imshow(self.p.T, extent=[0, X, 0, Y], origin='lower', cmap='jet', aspect='auto')
+        axs[0].set_title('Мой метод')
+        axs[0].set_xlabel('x')
+        axs[0].set_ylabel('y')
+        fig.colorbar(im0, ax=axs[0], label='Temp')
+
+        # Второй subplot: встроенный метод
+        im1 = axs[1].imshow(other_array.T, extent=[0, X, 0, Y], origin='lower', cmap='jet', aspect='auto')
+        axs[1].set_title('Встроенный метод')
+        axs[1].set_xlabel('x')
+        axs[1].set_ylabel('y')
+        fig.colorbar(im1, ax=axs[1], label='Temp')
+
         plt.show()
+
+
